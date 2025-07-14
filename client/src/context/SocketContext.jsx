@@ -20,7 +20,7 @@ export function SocketProvider({ children }) {
 
   useEffect(() => {
     if (user) {
-      const newSocket = io('https://work-2-eypmeeyoeujzmcvs.prod-runtime.all-hands.dev')
+      const newSocket = io('https://rodost.com')
       
       newSocket.on('connect', () => {
         console.log('Connected to server')

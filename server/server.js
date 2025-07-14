@@ -7,6 +7,16 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
+require('dotenv').config();
+
+// Import database models
+const { testConnection } = require('./config/db');
+const { initializeDatabase } = require('./config/init-db');
+const User = require('./models/User');
+const Match = require('./models/Match');
+const Message = require('./models/Message');
+const AdminSettings = require('./models/AdminSettings');
 const { createDemoUsers } = require('./demo-users');
 
 const app = express();
@@ -34,14 +44,10 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// In-memory storage (in production, use a proper database)
-const users = new Map();
-const matches = new Map();
-const messages = new Map();
+// In-memory storage for online users
 const onlineUsers = new Map();
-const adminSettings = new Map();
 
-const JWT_SECRET = 'your-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 // Helper functions
 const generateToken = (userId) => {
@@ -57,7 +63,6 @@ const verifyToken = (token) => {
 };
 
 // Create uploads directory
-const fs = require('fs');
 if (!fs.existsSync('uploads')) {
   fs.mkdirSync('uploads');
 }
@@ -68,28 +73,25 @@ app.post('/api/register', async (req, res) => {
     const { email, password, name, age, bio } = req.body;
     
     // Check if user already exists
-    for (const [id, user] of users) {
-      if (user.email === email) {
-        return res.status(400).json({ error: 'User already exists' });
-      }
+    const existingUser = await User.findByEmail(email);
+    if (existingUser) {
+      return res.status(400).json({ error: 'User already exists' });
     }
     
     const hashedPassword = await bcrypt.hash(password, 10);
     const userId = uuidv4();
     
-    const user = {
+    const userData = {
       id: userId,
       email,
       password: hashedPassword,
       name,
       age,
       bio,
-      photos: [],
-      createdAt: new Date(),
-      isOnline: false
+      isAdmin: false
     };
     
-    users.set(userId, user);
+    const user = await User.create(userData);
     
     const token = generateToken(userId);
     const userResponse = { ...user };
@@ -97,6 +99,7 @@ app.post('/api/register', async (req, res) => {
     
     res.json({ token, user: userResponse });
   } catch (error) {
+    console.error('Registration error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -105,34 +108,28 @@ app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    let foundUser = null;
-    for (const [id, user] of users) {
-      if (user.email === email) {
-        foundUser = user;
-        break;
-      }
-    }
-    
-    if (!foundUser) {
+    const user = await User.findByEmail(email);
+    if (!user) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
     
-    const isValidPassword = await bcrypt.compare(password, foundUser.password);
+    const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
     
-    const token = generateToken(foundUser.id);
-    const userResponse = { ...foundUser };
+    const token = generateToken(user.id);
+    const userResponse = { ...user };
     delete userResponse.password;
     
     res.json({ token, user: userResponse });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-app.post('/api/upload-photo', upload.single('photo'), (req, res) => {
+app.post('/api/upload-photo', upload.single('photo'), async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     const decoded = verifyToken(token);
@@ -141,21 +138,22 @@ app.post('/api/upload-photo', upload.single('photo'), (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
     
-    const user = users.get(decoded.userId);
+    const user = await User.findById(decoded.userId);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
     
     const photoUrl = `/uploads/${req.file.filename}`;
-    user.photos.push(photoUrl);
+    await User.addPhoto(decoded.userId, photoUrl);
     
     res.json({ photoUrl });
   } catch (error) {
+    console.error('Upload photo error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-app.get('/api/discover', (req, res) => {
+app.get('/api/discover', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     const decoded = verifyToken(token);
@@ -164,34 +162,28 @@ app.get('/api/discover', (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
     
-    const currentUser = users.get(decoded.userId);
+    const currentUser = await User.findById(decoded.userId);
     if (!currentUser) {
       return res.status(404).json({ error: 'User not found' });
     }
     
     // Get users that haven't been swiped on yet
-    const swipedUsers = matches.get(decoded.userId) || { liked: [], passed: [] };
-    const allSwipedIds = [...swipedUsers.liked, ...swipedUsers.passed];
+    const potentialMatches = await Match.getPotentialMatches(decoded.userId);
     
-    const potentialMatches = Array.from(users.values())
-      .filter(user => 
-        user.id !== decoded.userId && 
-        !allSwipedIds.includes(user.id)
-        // Removed photo requirement for demo purposes
-      )
-      .map(user => {
-        const userCopy = { ...user };
-        delete userCopy.password;
-        return userCopy;
-      });
+    // Remove passwords from response
+    const safeMatches = potentialMatches.map(user => {
+      const { password, ...safeUser } = user;
+      return safeUser;
+    });
     
-    res.json(potentialMatches);
+    res.json(safeMatches);
   } catch (error) {
+    console.error('Discover error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-app.post('/api/swipe', (req, res) => {
+app.post('/api/swipe', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     const decoded = verifyToken(token);
@@ -203,18 +195,14 @@ app.post('/api/swipe', (req, res) => {
     
     const userId = decoded.userId;
     
-    if (!matches.has(userId)) {
-      matches.set(userId, { liked: [], passed: [] });
-    }
-    
-    const userMatches = matches.get(userId);
+    // Save the swipe action
+    await Match.create(userId, targetUserId, action);
     
     if (action === 'like') {
-      userMatches.liked.push(targetUserId);
-      
       // Check if it's a mutual match
-      const targetMatches = matches.get(targetUserId);
-      if (targetMatches && targetMatches.liked.includes(userId)) {
+      const isMatch = await Match.checkMutualMatch(userId, targetUserId);
+      
+      if (isMatch) {
         // It's a match!
         res.json({ match: true, targetUserId });
         
@@ -232,15 +220,15 @@ app.post('/api/swipe', (req, res) => {
         res.json({ match: false });
       }
     } else {
-      userMatches.passed.push(targetUserId);
       res.json({ match: false });
     }
   } catch (error) {
+    console.error('Swipe error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-app.get('/api/matches', (req, res) => {
+app.get('/api/matches', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     const decoded = verifyToken(token);
@@ -250,69 +238,19 @@ app.get('/api/matches', (req, res) => {
     }
     
     const userId = decoded.userId;
-    const userMatches = matches.get(userId);
-    
-    if (!userMatches) {
-      return res.json([]);
-    }
     
     // Find mutual matches
-    const mutualMatches = [];
-    for (const likedUserId of userMatches.liked) {
-      const otherUserMatches = matches.get(likedUserId);
-      if (otherUserMatches && otherUserMatches.liked.includes(userId)) {
-        const matchedUser = users.get(likedUserId);
-        if (matchedUser) {
-          const userCopy = { ...matchedUser };
-          delete userCopy.password;
-          userCopy.isOnline = onlineUsers.has(likedUserId);
-          mutualMatches.push(userCopy);
-        }
-      }
-    }
+    const mutualMatches = await Match.getMutualMatches(userId);
     
     res.json(mutualMatches);
   } catch (error) {
+    console.error('Get matches error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
 // Admin routes for Agora settings
-app.post('/api/admin/agora-settings', (req, res) => {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-    const decoded = verifyToken(token);
-    
-    if (!decoded) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    
-    // Check if user is admin (for demo, we'll use a simple check)
-    const user = users.get(decoded.userId);
-    if (!user || user.email !== 'admin@loveconnect.com') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-    
-    const { appId, appCertificate, tokenExpirationTime } = req.body;
-    
-    if (!appId || !appCertificate) {
-      return res.status(400).json({ error: 'App ID and App Certificate are required' });
-    }
-    
-    adminSettings.set('agora', {
-      appId,
-      appCertificate,
-      tokenExpirationTime: tokenExpirationTime || 3600, // Default 1 hour
-      updatedAt: new Date()
-    });
-    
-    res.json({ message: 'Agora settings updated successfully' });
-  } catch (error) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-app.get('/api/admin/agora-settings', (req, res) => {
+app.post('/api/admin/agora-settings', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     const decoded = verifyToken(token);
@@ -322,12 +260,49 @@ app.get('/api/admin/agora-settings', (req, res) => {
     }
     
     // Check if user is admin
-    const user = users.get(decoded.userId);
-    if (!user || user.email !== 'admin@loveconnect.com') {
+    const user = await User.findById(decoded.userId);
+    if (!user || !user.isAdmin) {
       return res.status(403).json({ error: 'Admin access required' });
     }
     
-    const agoraSettings = adminSettings.get('agora');
+    const { appId, appCertificate, tokenExpirationTime } = req.body;
+    
+    if (!appId || !appCertificate) {
+      return res.status(400).json({ error: 'App ID and App Certificate are required' });
+    }
+    
+    const agoraSettings = {
+      appId,
+      appCertificate,
+      tokenExpirationTime: tokenExpirationTime || 3600, // Default 1 hour
+      updatedAt: new Date()
+    };
+    
+    await AdminSettings.saveSettings('agora', agoraSettings);
+    
+    res.json({ message: 'Agora settings updated successfully' });
+  } catch (error) {
+    console.error('Save Agora settings error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/admin/agora-settings', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    const decoded = verifyToken(token);
+    
+    if (!decoded) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    // Check if user is admin
+    const user = await User.findById(decoded.userId);
+    if (!user || !user.isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    const agoraSettings = await AdminSettings.getByKey('agora');
     if (!agoraSettings) {
       return res.json({ configured: false });
     }
@@ -335,17 +310,18 @@ app.get('/api/admin/agora-settings', (req, res) => {
     // Don't send the certificate in the response for security
     res.json({
       configured: true,
-      appId: agoraSettings.appId,
-      tokenExpirationTime: agoraSettings.tokenExpirationTime,
-      updatedAt: agoraSettings.updatedAt
+      appId: agoraSettings.value.appId,
+      tokenExpirationTime: agoraSettings.value.tokenExpirationTime,
+      updatedAt: agoraSettings.value.updatedAt
     });
   } catch (error) {
+    console.error('Get Agora settings error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
 // Get Agora token for video calls
-app.post('/api/agora/token', (req, res) => {
+app.post('/api/agora/token', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     const decoded = verifyToken(token);
@@ -360,7 +336,7 @@ app.post('/api/agora/token', (req, res) => {
       return res.status(400).json({ error: 'Channel name is required' });
     }
     
-    const agoraSettings = adminSettings.get('agora');
+    const agoraSettings = await AdminSettings.getByKey('agora');
     if (!agoraSettings) {
       return res.status(400).json({ error: 'Agora not configured. Please contact admin.' });
     }
@@ -370,13 +346,14 @@ app.post('/api/agora/token', (req, res) => {
     const mockToken = `mock_token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     res.json({
-      appId: agoraSettings.appId,
+      appId: agoraSettings.value.appId,
       token: mockToken,
       channelName,
       uid: uid || decoded.userId,
-      expirationTime: Date.now() + (agoraSettings.tokenExpirationTime * 1000)
+      expirationTime: Date.now() + (agoraSettings.value.tokenExpirationTime * 1000)
     });
   } catch (error) {
+    console.error('Get Agora token error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -385,12 +362,9 @@ app.post('/api/agora/token', (req, res) => {
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   
-  socket.on('user-online', (userId) => {
+  socket.on('user-online', async (userId) => {
     onlineUsers.set(userId, socket.id);
-    const user = users.get(userId);
-    if (user) {
-      user.isOnline = true;
-    }
+    await User.updateOnlineStatus(userId, true);
     socket.userId = userId;
   });
   
@@ -398,28 +372,28 @@ io.on('connection', (socket) => {
     socket.join(chatId);
   });
   
-  socket.on('send-message', (data) => {
+  socket.on('send-message', async (data) => {
     const { chatId, message, senderId } = data;
-    
-    if (!messages.has(chatId)) {
-      messages.set(chatId, []);
-    }
     
     const messageObj = {
       id: uuidv4(),
+      chatId,
       senderId,
-      message,
-      timestamp: new Date()
+      message
     };
     
-    messages.get(chatId).push(messageObj);
+    // Save message to database
+    await Message.create(messageObj);
     
     // Send to all users in the chat
-    io.to(chatId).emit('new-message', messageObj);
+    io.to(chatId).emit('new-message', {
+      ...messageObj,
+      timestamp: new Date()
+    });
   });
   
-  socket.on('get-messages', (chatId) => {
-    const chatMessages = messages.get(chatId) || [];
+  socket.on('get-messages', async (chatId) => {
+    const chatMessages = await Message.getByChatId(chatId);
     socket.emit('chat-messages', chatMessages);
   });
   
@@ -432,7 +406,7 @@ io.on('connection', (socket) => {
       io.to(targetSocket).emit('incoming-call', {
         offer,
         callerId,
-        callerName: users.get(callerId)?.name
+        callerName: null // Will be fetched from database
       });
     }
   });
@@ -465,9 +439,13 @@ io.on('connection', (socket) => {
   });
 
   // Agora video calling events
-  socket.on('agora-call-request', (data) => {
-    const { targetUserId, callerId, callerName, channelName } = data;
+  socket.on('agora-call-request', async (data) => {
+    const { targetUserId, callerId, channelName } = data;
     const targetSocket = onlineUsers.get(targetUserId);
+    
+    // Get caller name from database
+    const caller = await User.findById(callerId);
+    const callerName = caller ? caller.name : 'Unknown';
     
     if (targetSocket) {
       io.to(targetSocket).emit('agora-call-request', {
@@ -505,32 +483,71 @@ io.on('connection', (socket) => {
     }
   });
   
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     console.log('User disconnected:', socket.id);
     
     if (socket.userId) {
       onlineUsers.delete(socket.userId);
-      const user = users.get(socket.userId);
-      if (user) {
-        user.isOnline = false;
-      }
+      await User.updateOnlineStatus(socket.userId, false);
     }
   });
 });
 
 // Initialize demo users
 const initializeDemoUsers = async () => {
-  if (users.size === 0) {
-    const demoUsers = await createDemoUsers();
-    demoUsers.forEach(user => {
-      users.set(user.id, user);
-    });
-    console.log(`Added ${demoUsers.length} demo users`);
+  try {
+    // Check if there are any users in the database
+    const allUsers = await User.getAll();
+    
+    if (allUsers.length === 0) {
+      console.log('No users found, creating demo users...');
+      const demoUsers = await createDemoUsers();
+      
+      // Insert demo users into the database
+      for (const user of demoUsers) {
+        await User.create(user);
+        
+        // Add photos for the user
+        if (user.photos && user.photos.length > 0) {
+          for (const photoUrl of user.photos) {
+            await User.addPhoto(user.id, photoUrl);
+          }
+        }
+      }
+      
+      console.log(`Added ${demoUsers.length} demo users`);
+    } else {
+      console.log(`Found ${allUsers.length} existing users`);
+    }
+  } catch (error) {
+    console.error('Error initializing demo users:', error);
   }
 };
 
+// Start the server
 const PORT = process.env.PORT || 12001;
-server.listen(PORT, '0.0.0.0', async () => {
-  console.log(`Server running on port ${PORT}`);
-  await initializeDemoUsers();
-});
+
+const startServer = async () => {
+  try {
+    // Initialize the database
+    await initializeDatabase();
+    
+    // Test the database connection
+    const connected = await testConnection();
+    if (!connected) {
+      console.error('Failed to connect to the database. Exiting...');
+      process.exit(1);
+    }
+    
+    // Start the server
+    server.listen(PORT, '0.0.0.0', async () => {
+      console.log(`Server running on port ${PORT}`);
+      await initializeDemoUsers();
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
