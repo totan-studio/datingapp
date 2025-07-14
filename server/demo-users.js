@@ -6,6 +6,18 @@ const createDemoUsers = async () => {
   const demoUsers = [
     {
       id: uuidv4(),
+      email: 'admin@loveconnect.com',
+      password: await bcrypt.hash('admin123', 10),
+      name: 'Admin User',
+      age: 30,
+      bio: 'System Administrator - Manage Agora settings and app configuration',
+      photos: [],
+      createdAt: new Date(),
+      isOnline: false,
+      isAdmin: true
+    },
+    {
+      id: uuidv4(),
       email: 'alice@example.com',
       password: await bcrypt.hash('password123', 10),
       name: 'Alice Johnson',

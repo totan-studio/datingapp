@@ -39,6 +39,7 @@ const users = new Map();
 const matches = new Map();
 const messages = new Map();
 const onlineUsers = new Map();
+const adminSettings = new Map();
 
 const JWT_SECRET = 'your-secret-key';
 
@@ -276,6 +277,110 @@ app.get('/api/matches', (req, res) => {
   }
 });
 
+// Admin routes for Agora settings
+app.post('/api/admin/agora-settings', (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    const decoded = verifyToken(token);
+    
+    if (!decoded) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    // Check if user is admin (for demo, we'll use a simple check)
+    const user = users.get(decoded.userId);
+    if (!user || user.email !== 'admin@loveconnect.com') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    const { appId, appCertificate, tokenExpirationTime } = req.body;
+    
+    if (!appId || !appCertificate) {
+      return res.status(400).json({ error: 'App ID and App Certificate are required' });
+    }
+    
+    adminSettings.set('agora', {
+      appId,
+      appCertificate,
+      tokenExpirationTime: tokenExpirationTime || 3600, // Default 1 hour
+      updatedAt: new Date()
+    });
+    
+    res.json({ message: 'Agora settings updated successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/admin/agora-settings', (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    const decoded = verifyToken(token);
+    
+    if (!decoded) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    // Check if user is admin
+    const user = users.get(decoded.userId);
+    if (!user || user.email !== 'admin@loveconnect.com') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    const agoraSettings = adminSettings.get('agora');
+    if (!agoraSettings) {
+      return res.json({ configured: false });
+    }
+    
+    // Don't send the certificate in the response for security
+    res.json({
+      configured: true,
+      appId: agoraSettings.appId,
+      tokenExpirationTime: agoraSettings.tokenExpirationTime,
+      updatedAt: agoraSettings.updatedAt
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get Agora token for video calls
+app.post('/api/agora/token', (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    const decoded = verifyToken(token);
+    
+    if (!decoded) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const { channelName, uid } = req.body;
+    
+    if (!channelName) {
+      return res.status(400).json({ error: 'Channel name is required' });
+    }
+    
+    const agoraSettings = adminSettings.get('agora');
+    if (!agoraSettings) {
+      return res.status(400).json({ error: 'Agora not configured. Please contact admin.' });
+    }
+    
+    // For demo purposes, we'll return the app ID and a mock token
+    // In production, you would generate a real token using Agora's token server
+    const mockToken = `mock_token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    res.json({
+      appId: agoraSettings.appId,
+      token: mockToken,
+      channelName,
+      uid: uid || decoded.userId,
+      expirationTime: Date.now() + (agoraSettings.tokenExpirationTime * 1000)
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Socket.io for real-time communication
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
@@ -318,7 +423,7 @@ io.on('connection', (socket) => {
     socket.emit('chat-messages', chatMessages);
   });
   
-  // WebRTC signaling
+  // WebRTC signaling (legacy)
   socket.on('call-user', (data) => {
     const { targetUserId, offer, callerId } = data;
     const targetSocket = onlineUsers.get(targetUserId);
@@ -356,6 +461,47 @@ io.on('connection', (socket) => {
     
     if (targetSocket) {
       io.to(targetSocket).emit('call-ended');
+    }
+  });
+
+  // Agora video calling events
+  socket.on('agora-call-request', (data) => {
+    const { targetUserId, callerId, callerName, channelName } = data;
+    const targetSocket = onlineUsers.get(targetUserId);
+    
+    if (targetSocket) {
+      io.to(targetSocket).emit('agora-call-request', {
+        callerId,
+        callerName,
+        channelName
+      });
+    }
+  });
+
+  socket.on('agora-call-accepted', (data) => {
+    const { callerId, accepterId } = data;
+    const callerSocket = onlineUsers.get(callerId);
+    
+    if (callerSocket) {
+      io.to(callerSocket).emit('agora-call-accepted', { accepterId });
+    }
+  });
+
+  socket.on('agora-call-rejected', (data) => {
+    const { callerId, rejecterId } = data;
+    const callerSocket = onlineUsers.get(callerId);
+    
+    if (callerSocket) {
+      io.to(callerSocket).emit('agora-call-rejected', { rejecterId });
+    }
+  });
+
+  socket.on('agora-call-ended', (data) => {
+    const { targetUserId } = data;
+    const targetSocket = onlineUsers.get(targetUserId);
+    
+    if (targetSocket) {
+      io.to(targetSocket).emit('agora-call-ended');
     }
   });
   

@@ -1,6 +1,6 @@
 # LoveConnect - Video Dating App
 
-A modern, full-stack video dating application built with React, Node.js, Socket.io, and WebRTC. Features real-time messaging, video calling, and a Tinder-like swipe interface.
+A modern, full-stack video dating application built with React, Node.js, Socket.io, and Agora RTC. Features real-time messaging, high-quality video calling, admin management, and a Tinder-like swipe interface.
 
 ## 🚀 Features
 
@@ -9,7 +9,8 @@ A modern, full-stack video dating application built with React, Node.js, Socket.
 - **Swipe Interface**: Tinder-like card swiping to discover potential matches
 - **Real-time Matching**: Instant notifications when someone likes you back
 - **Live Chat**: Real-time messaging with matched users
-- **Video Calling**: WebRTC-powered video calls with camera/microphone controls
+- **Video Calling**: Agora RTC-powered high-quality video calls with camera/microphone controls
+- **Admin Dashboard**: Comprehensive admin panel to manage Agora video calling settings
 - **Responsive Design**: Works seamlessly on desktop and mobile devices
 - **Modern UI**: Beautiful gradient design with smooth animations
 
@@ -21,6 +22,7 @@ A modern, full-stack video dating application built with React, Node.js, Socket.
 - **Tailwind CSS** - Utility-first CSS framework
 - **React Router** - Client-side routing
 - **Socket.io Client** - Real-time communication
+- **Agora RTC SDK** - High-quality video calling
 - **React Spring** - Smooth animations
 - **Framer Motion** - Advanced animations
 - **Lucide React** - Beautiful icons
@@ -29,7 +31,7 @@ A modern, full-stack video dating application built with React, Node.js, Socket.
 - **Node.js** - JavaScript runtime
 - **Express.js** - Web application framework
 - **Socket.io** - Real-time bidirectional communication
-- **WebRTC** - Peer-to-peer video calling
+- **Agora RTC** - Professional video calling service
 - **Multer** - File upload handling
 - **bcryptjs** - Password hashing
 - **JWT** - Authentication tokens
@@ -85,10 +87,17 @@ A modern, full-stack video dating application built with React, Node.js, Socket.
 - See online/offline status
 
 ### 5. Video Calling
-- Start video calls with online matches
+- Start video calls with matched users
 - Full camera and microphone controls
-- High-quality WebRTC peer-to-peer connection
+- High-quality Agora RTC connection
 - Call duration tracking
+- Professional-grade video quality
+
+### 6. Admin Management
+- Admin dashboard for managing Agora video calling settings
+- Configure Agora App ID and App Certificate
+- Set token expiration times
+- Monitor video calling configuration status
 
 ## 🔧 Development
 
@@ -123,6 +132,24 @@ The application is configured to work with the provided runtime URLs:
 - Frontend: Port 12000
 - Backend: Port 12001
 
+### Agora Video Calling Setup
+
+1. **Get Agora Credentials**:
+   - Sign up at [Agora Console](https://console.agora.io/)
+   - Create a new project
+   - Copy the App ID and generate an App Certificate
+
+2. **Configure Admin Settings**:
+   - Login as admin user: `admin@loveconnect.com` / `admin123`
+   - Navigate to Admin Dashboard
+   - Enter your Agora App ID and App Certificate
+   - Set token expiration time (default: 1 hour)
+   - Save settings
+
+3. **Demo Credentials** (for testing):
+   - App ID: `test-app-id-12345`
+   - App Certificate: `test-app-certificate-67890`
+
 ## 🔒 Security Features
 
 - Password hashing with bcryptjs
@@ -131,12 +158,32 @@ The application is configured to work with the provided runtime URLs:
 - CORS configuration for secure cross-origin requests
 - Input validation and sanitization
 
+## 👥 Demo Users
+
+The application comes with pre-configured demo users for testing:
+
+### Admin User
+- **Email**: `admin@loveconnect.com`
+- **Password**: `admin123`
+- **Role**: Administrator with access to Admin Dashboard
+- **Features**: Can configure Agora video calling settings
+
+### Regular Users
+- **Alice Johnson**: `alice@example.com` / `password123`
+- **Bob Smith**: `bob@example.com` / `password123`
+- **Charlie Brown**: `charlie@example.com` / `password123`
+- **Diana Prince**: `diana@example.com` / `password123`
+- **Eve Wilson**: `eve@example.com` / `password123`
+
+All demo users are 25+ years old and have complete profiles for testing the matching system.
+
 ## 📊 Data Storage
 
 Currently uses in-memory storage for simplicity. In production, you would want to integrate:
 - **Database**: MongoDB, PostgreSQL, or MySQL for persistent data storage
 - **File Storage**: AWS S3, Cloudinary, or similar for photo storage
 - **Redis**: For session management and real-time data
+- **Agora Settings**: Currently stored in-memory, should be moved to database in production
 
 ## 🎨 UI/UX Features
 
@@ -181,6 +228,8 @@ runtime: nodejs18
 env_variables:
   JWT_SECRET: "your-super-secret-jwt-key-change-in-production"
   NODE_ENV: "production"
+  AGORA_APP_ID: "your-agora-app-id"
+  AGORA_APP_CERTIFICATE: "your-agora-app-certificate"
 
 automatic_scaling:
   min_instances: 1
@@ -362,6 +411,35 @@ gsutil mb gs://loveconnect-uploads
 gsutil iam ch allUsers:objectViewer gs://loveconnect-uploads
 ```
 
+**3. Agora RTC Configuration**
+
+For production video calling, you need to configure Agora:
+
+```bash
+# Get your Agora credentials from https://console.agora.io/
+# 1. Create a project in Agora Console
+# 2. Get App ID from project overview
+# 3. Generate App Certificate in project settings
+
+# Set environment variables in your deployment
+AGORA_APP_ID=your-actual-agora-app-id
+AGORA_APP_CERTIFICATE=your-actual-agora-app-certificate
+
+# Or configure via Admin Dashboard after deployment:
+# 1. Deploy your application
+# 2. Login as admin (admin@loveconnect.com / admin123)
+# 3. Go to Admin Dashboard
+# 4. Enter Agora credentials
+# 5. Save settings
+```
+
+**Important Agora Notes:**
+- Agora provides 10,000 free minutes per month
+- For production, implement proper token generation server
+- Current implementation uses mock tokens for demo purposes
+- Admin can configure Agora settings via web interface
+- Video calling will not work without valid Agora credentials
+
 #### Environment Variables for Production
 
 Update your environment variables:
@@ -371,6 +449,8 @@ JWT_SECRET=your-super-secure-jwt-secret-key
 DATABASE_URL=postgresql://loveconnect-user:password@/loveconnect?host=/cloudsql/loveconnect-dating-app:us-central1:loveconnect-db
 GOOGLE_CLOUD_PROJECT_ID=loveconnect-dating-app
 STORAGE_BUCKET=loveconnect-uploads
+AGORA_APP_ID=your-agora-app-id
+AGORA_APP_CERTIFICATE=your-agora-app-certificate
 NODE_ENV=production
 ```
 
