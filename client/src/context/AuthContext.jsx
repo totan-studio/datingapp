@@ -3,7 +3,7 @@ import axios from 'axios'
 
 const AuthContext = createContext()
 
-const API_BASE_URL = 'https://work-2-eypmeeyoeujzmcvs.prod-runtime.all-hands.dev'
+const API_BASE_URL = 'https://rodost.com'
 
 // Configure axios defaults
 axios.defaults.baseURL = API_BASE_URL

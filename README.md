@@ -1,6 +1,6 @@
 # LoveConnect - Video Dating App
 
-A modern, full-stack video dating application built with React, Node.js, Socket.io, and Agora RTC. Features real-time messaging, high-quality video calling, admin management, and a Tinder-like swipe interface.
+A modern, full-stack video dating application built with React, Node.js, Socket.io, MySQL, and Agora RTC. Features real-time messaging, high-quality video calling, admin management, and a Tinder-like swipe interface.
 
 ## 🚀 Features
 
@@ -13,6 +13,8 @@ A modern, full-stack video dating application built with React, Node.js, Socket.
 - **Admin Dashboard**: Comprehensive admin panel to manage Agora video calling settings
 - **Responsive Design**: Works seamlessly on desktop and mobile devices
 - **Modern UI**: Beautiful gradient design with smooth animations
+- **Database Storage**: MySQL database for persistent data storage
+- **Domain Configuration**: Configured to run on rodost.com
 
 ## 🛠️ Tech Stack
 
@@ -31,10 +33,12 @@ A modern, full-stack video dating application built with React, Node.js, Socket.
 - **Node.js** - JavaScript runtime
 - **Express.js** - Web application framework
 - **Socket.io** - Real-time bidirectional communication
+- **MySQL** - Relational database for persistent storage
 - **Agora RTC** - Professional video calling service
 - **Multer** - File upload handling
 - **bcryptjs** - Password hashing
 - **JWT** - Authentication tokens
+- **dotenv** - Environment variable management
 
 ## 📦 Installation
 
@@ -49,10 +53,43 @@ A modern, full-stack video dating application built with React, Node.js, Socket.
    npm run install-all
    ```
 
-3. **Start the development servers**
+3. **Set up the database**
+   ```bash
+   # Install MySQL or MariaDB
+   sudo apt-get install mariadb-server
+
+   # Start the MySQL service
+   sudo service mariadb start
+
+   # Create database and user
+   mysql -u root -p
+   ```
+
+   In the MySQL prompt, run:
+   ```sql
+   CREATE DATABASE datingapp;
+   CREATE USER 'datingapp'@'localhost' IDENTIFIED BY 'password';
+   GRANT ALL PRIVILEGES ON datingapp.* TO 'datingapp'@'localhost';
+   FLUSH PRIVILEGES;
+   EXIT;
+   ```
+
+4. **Configure environment variables**
+   ```bash
+   # Create .env file in the server directory
+   cd server
+   cp .env.example .env
+   # Edit the .env file with your database credentials and other settings
+   ```
+
+5. **Start the development servers**
    ```bash
    npm run dev
    ```
+
+6. **Database Documentation**
+   
+   For more details about the database schema and setup, see [DATABASE.md](DATABASE.md)
 
    This will start:
    - Backend server on port 12001
