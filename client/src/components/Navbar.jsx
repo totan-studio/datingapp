@@ -1,7 +1,7 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { Heart, Home, Search, MessageCircle, User, LogOut } from 'lucide-react'
+import { Heart, Home, Search, MessageCircle, User, LogOut, Settings } from 'lucide-react'
 
 export default function Navbar() {
   const { user, logout } = useAuth()
@@ -15,6 +15,11 @@ export default function Navbar() {
     { path: '/matches', icon: MessageCircle, label: 'Matches' },
     { path: '/profile', icon: User, label: 'Profile' },
   ]
+
+  // Add admin link for admin users
+  if (user?.email === 'admin@loveconnect.com') {
+    navItems.push({ path: '/admin', icon: Settings, label: 'Admin' })
+  }
 
   return (
     <nav className="bg-white shadow-lg border-b border-gray-100">
@@ -55,7 +60,7 @@ export default function Navbar() {
               </div>
               {user?.photos?.[0] && (
                 <img
-                  src={`https://work-2-fqgbvgfiamltorll.prod-runtime.all-hands.dev${user.photos[0]}`}
+                  src={`https://work-2-eypmeeyoeujzmcvs.prod-runtime.all-hands.dev${user.photos[0]}`}
                   alt="Profile"
                   className="h-8 w-8 rounded-full object-cover"
                 />

@@ -41,7 +41,7 @@ const SwipeCard = ({ user, onSwipe, style }) => {
       <div className="relative h-full">
         {user.photos?.[0] ? (
           <img
-            src={`https://work-2-fqgbvgfiamltorll.prod-runtime.all-hands.dev${user.photos[0]}`}
+            src={`https://work-2-eypmeeyoeujzmcvs.prod-runtime.all-hands.dev${user.photos[0]}`}
             alt={user.name}
             className="w-full h-full object-cover"
           />

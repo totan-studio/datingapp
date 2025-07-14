@@ -10,7 +10,8 @@ import Profile from './pages/Profile'
 import Discover from './pages/Discover'
 import Matches from './pages/Matches'
 import Chat from './pages/Chat'
-import VideoCall from './pages/VideoCall'
+import AgoraVideoCall from './pages/AgoraVideoCall'
+import Admin from './pages/Admin'
 import Navbar from './components/Navbar'
 
 function ProtectedRoute({ children }) {
@@ -67,7 +68,12 @@ function AppContent() {
         } />
         <Route path="/video-call/:userId" element={
           <ProtectedRoute>
-            <VideoCall />
+            <AgoraVideoCall />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin" element={
+          <ProtectedRoute>
+            <Admin />
           </ProtectedRoute>
         } />
         <Route path="/" element={<Navigate to="/dashboard" />} />

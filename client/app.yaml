@@ -1,0 +1,22 @@
+runtime: nodejs18
+
+env_variables:
+  NODE_ENV: "production"
+
+handlers:
+- url: /static
+  static_dir: dist/static
+  secure: always
+
+- url: /assets
+  static_dir: dist/assets
+  secure: always
+
+- url: /.*
+  static_files: dist/index.html
+  upload: dist/index.html
+  secure: always
+
+automatic_scaling:
+  min_instances: 1
+  max_instances: 5

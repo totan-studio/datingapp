@@ -168,14 +168,13 @@ export default function Chat() {
           </div>
 
           <div className="flex items-center space-x-2">
-            {chatUser.isOnline && (
-              <Link
-                to={`/video-call/${chatUser.id}`}
-                className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-full transition-colors"
-              >
-                <Video className="h-5 w-5" />
-              </Link>
-            )}
+            <Link
+              to={`/video-call/${chatUser.id}`}
+              className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-full transition-colors"
+              title="Start Video Call"
+            >
+              <Video className="h-5 w-5" />
+            </Link>
           </div>
         </div>
       </div>
